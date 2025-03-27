@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 WebSocket Chat</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; }
+        #chat-box { width: 80%; height: 300px; border: 1px solid #000; overflow-y: auto; margin: 10px auto; padding: 5px; text-align: left; }
+        #status { color: red; font-weight: bold; }
+        .message { padding: 5px; margin: 5px; border-radius: 5px; }
+        .esp32 { background-color: lightblue; }
+        .pc { background-color: lightgreen; }
+    </style>
+</head>
+<body>
+    <h1>ESP32 WebSocket Chat</h1>
+    <p id="status">WebSocket Disconnected.</p>
+    <div id="chat-box"></div>
+    <input type="text" id="messageInput" placeholder="Type a message..." />
+    <button onclick="sendMessage()">Send</button>
+
+    <script>
+        let esp32_ip = "192.168.27.96"; // Replace with your ESP32 IP from Serial Monitor
+        let socket = new WebSocket("ws://" + esp32_ip + ":81"); 
+
+        socket.onopen = function() {
+            document.getElementById("status").innerHTML = "Connected to WebSocket!";
+            document.getElementById("status").style.color = "green";
+        };
+
+        socket.onerror = function(error) {
+            document.getElementById("status").innerHTML = "WebSocket Error!";
+            console.error("WebSocket Error:", error);
+        };
+
+        socket.onclose = function() {
+            document.getElementById("status").innerHTML = "WebSocket Disconnected.";
+            document.getElementById("status").style.color = "red";
+        };
+
+        socket.onmessage = function(event) {
+            let chatBox = document.getElementById("chat-box");
+            let msgClass = event.data.startsWith("ESP32") ? "esp32" : "pc";
+            chatBox.innerHTML += `<p class="message ${msgClass}">${event.data}</p>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+        };
+
+        function sendMessage() {
+            let message = document.getElementById("messageInput").value;
+            if (message.trim() !== "") {
+                socket.send(message);
+                document.getElementById("messageInput").value = "";
+            }
+        }
+    </script>
+</body>
+</html>
