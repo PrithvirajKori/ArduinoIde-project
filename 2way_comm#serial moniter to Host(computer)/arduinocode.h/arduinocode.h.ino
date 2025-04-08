@@ -1,45 +1,40 @@
-#include <WiFi.h>
-#include <WebSocketsServer.h>
+#include <TinyGPS++.h>
+#include <SoftwareSerial.h>
 
-const char* ssid = "Prithviraj";       // Change to your WiFi SSID
-const char* password = "PrithviraJK123"; // Change to your WiFi Password
 
-WebSocketsServer webSocket(81); // WebSocket server on port 81
+#define GPS_RX_PIN 33 
+#define GPS_TX_PIN 32 
+
+
+TinyGPSPlus gps;
+SoftwareSerial gpsSerial(GPS_RX_PIN, GPS_TX_PIN);
+
 
 void setup() {
-    Serial.begin(115200);
-    WiFi.begin(ssid, password);
+    Serial.begin(115200);  
+    gpsSerial.begin(115200); 
 
-    Serial.print("Connecting to WiFi...");
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-    Serial.println("\nConnected to WiFi.");
-    Serial.print("WebSocket Server IP: ");
-    Serial.println(WiFi.localIP());  // Copy this IP address
 
-    webSocket.begin();
-    webSocket.onEvent(webSocketEvent);
+    Serial.println("Getting GPS data...");
 }
+
 
 void loop() {
-    webSocket.loop();
+    // Read data from GPS module
+    while (gpsSerial.available() > 0) {
+        if (gps.encode(gpsSerial.read())) {
+            if (gps.location.isValid()) {
+                // Get latitude and longitude
+                float latitude = gps.location.lat();
+                float longitude = gps.location.lng();
 
-    // Read from Serial Monitor and send to WebSocket clients
-    if (Serial.available()) {
-        String message = Serial.readStringUntil('\n');
-        webSocket.broadcastTXT("ESP32: " + message);
-    }
-}
 
-// WebSocket Event Handler
-void webSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length) {
-    switch (type) {
-        case WStype_TEXT:
-            Serial.print("Received from Host: ");
-            Serial.println((char*)payload); // Print message from WebSocket client
-            webSocket.broadcastTXT("PC: " + String((char*)payload)); // Send to all clients
-            break;
+                // Print latitude and longitude
+                Serial.print("Latitude: ");
+                Serial.println(latitude, 7);
+                Serial.print("Longitude: ");
+                Serial.println(longitude, 7);
+            }
+        }
     }
 }

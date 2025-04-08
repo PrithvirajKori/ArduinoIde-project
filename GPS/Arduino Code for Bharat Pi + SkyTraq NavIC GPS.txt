@@ -1,0 +1,388 @@
+*(Arduino Code for Bharat Pi + SkyTraq NavIC GPS)
+
+#include <TinyGPS++.h>
+#include <HardwareSerial.h>
+
+#define GPS_RX_PIN 33  // RX of ESP32 <-- TX of GPS
+#define GPS_TX_PIN 32  // TX of ESP32 --> RX of GPS
+
+TinyGPSPlus gps;
+HardwareSerial gpsSerial(1);  // Use UART1
+
+void setup() {
+  Serial.begin(115200);
+  gpsSerial.begin(115200, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+  
+  delay(2000);
+  Serial.println();
+  Serial.println("Bharat Pi + SkyTraq PX1125S-01A NavIC GPS Tracker");
+  Serial.println("Waiting for GPS signal...");
+}
+
+void loop() {
+  while (gpsSerial.available() > 0) {
+    char c = gpsSerial.read();
+    gps.encode(c);
+
+    if (gps.location.isUpdated()) {
+      Serial.print("Latitude: ");
+      Serial.println(gps.location.lat(), 7);
+      Serial.print("Longitude: ");
+      Serial.println(gps.location.lng(), 7);
+      Serial.print("Google Maps: ");
+      Serial.print("https://maps.google.com/?q=");
+      Serial.print(gps.location.lat(), 7);
+      Serial.print(",");
+      Serial.println(gps.location.lng(), 7);
+      
+      Serial.print("Speed (km/h): ");
+      Serial.println(gps.speed.kmph());
+
+      Serial.print("Satellites: ");
+      Serial.println(gps.satellites.value());
+
+      Serial.print("Altitude (m): ");
+      Serial.println(gps.altitude.meters());
+      
+      Serial.println("-------------------------");
+    }
+  }
+}
+.
+.
+.
+.
+.
+*(Arduino Code for ESP32 & PX1125S NavIC GPS Module)
+
+#include <TinyGPS++.h>
+#include <HardwareSerial.h>
+
+#define GPS_RX_PIN 33  // Connect TX of PX1125S to GPIO33 of ESP32
+#define GPS_TX_PIN 32  // Connect RX of PX1125S to GPIO32 of ESP32
+
+TinyGPSPlus gps;
+HardwareSerial gpsSerial(1);
+
+void setup() {
+  Serial.begin(115200);
+  gpsSerial.begin(115200, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN); // PX1125S runs at 115200 baud
+
+  delay(3000);
+  Serial.println();
+  Serial.println(F("SkyTraq PX1125S NavIC GPS + ESP32 Test"));
+  Serial.println(F("Ensure antenna has clear sky view for better accuracy..."));
+  Serial.println();
+}
+
+void loop() {
+  while (gpsSerial.available() > 0) {
+    if (gps.encode(gpsSerial.read())) {
+      if (gps.location.isValid()) {
+        float latitude = gps.location.lat();
+        float longitude = gps.location.lng();
+        double altitude = gps.altitude.meters();
+        uint32_t sats = gps.satellites.value();
+        double speed = gps.speed.kmph();
+
+        Serial.println("----- GPS Data -----");
+        Serial.print("Latitude: "); Serial.println(latitude, 6);
+        Serial.print("Longitude: "); Serial.println(longitude, 6);
+        Serial.print("Altitude: "); Serial.print(altitude); Serial.println(" m");
+        Serial.print("Satellites: "); Serial.println(sats);
+        Serial.print("Speed: "); Serial.print(speed); Serial.println(" km/h");
+
+        Serial.print("Google Maps Link: ");
+        Serial.print("https://maps.google.com/?q=");
+        Serial.print(latitude, 6);
+        Serial.print(",");
+        Serial.println(longitude, 6);
+
+        Serial.println();
+        delay(2000);  // Delay for readability
+      } else {
+        Serial.println("Waiting for valid GPS fix...");
+      }
+    }
+  }
+}
+.
+.
+.
+.
+.
+* Code (Wi-Fi to AWS IoT):
+
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <TinyGPS++.h>
+#include <HardwareSerial.h>
+
+// WiFi credentials
+const char* ssid = "YOUR_WIFI_SSID";
+const char* password = "YOUR_WIFI_PASSWORD";
+
+// AWS IoT details
+const char* awsEndpoint = "YOUR_AWS_ENDPOINT_HERE";  // like xxxxxxx-ats.iot.us-east-1.amazonaws.com
+const int awsPort = 8883;
+const char* thingName = "YourThingName";
+
+// Certs (in PROGMEM)
+const char* rootCA = \
+"-----BEGIN CERTIFICATE-----\n" \
+"...\n" \
+"-----END CERTIFICATE-----\n";
+
+const char* certificate = \
+"-----BEGIN CERTIFICATE-----\n" \
+"...\n" \
+"-----END CERTIFICATE-----\n";
+
+const char* privateKey = \
+"-----BEGIN RSA PRIVATE KEY-----\n" \
+"...\n" \
+"-----END RSA PRIVATE KEY-----\n";
+
+// GPS setup
+#define GPS_RX 33
+#define GPS_TX 32
+HardwareSerial gpsSerial(1);
+TinyGPSPlus gps;
+
+// WiFiClientSecure for TLS
+WiFiClientSecure client;
+
+void setup() {
+  Serial.begin(115200);
+  gpsSerial.begin(115200, SERIAL_8N1, GPS_RX, GPS_TX);
+
+  // Connect to Wi-Fi
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to Wi-Fi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi connected.");
+
+  // Set AWS IoT credentials
+  client.setCACert(rootCA);
+  client.setCertificate(certificate);
+  client.setPrivateKey(privateKey);
+}
+
+void loop() {
+  while (gpsSerial.available()) {
+    gps.encode(gpsSerial.read());
+  }
+
+  if (gps.location.isValid()) {
+    float lat = gps.location.lat();
+    float lng = gps.location.lng();
+    float speed = gps.speed.kmph();
+
+    String payload = "{";
+    payload += "\"latitude\":" + String(lat, 6) + ",";
+    payload += "\"longitude\":" + String(lng, 6) + ",";
+    payload += "\"speed\":" + String(speed, 2);
+    payload += "}";
+
+    // Connect to AWS
+    if (!client.connect(thingName, awsEndpoint, awsPort)) {
+      Serial.println("AWS connection failed.");
+    } else {
+      Serial.println("Sending payload: " + payload);
+      String topic = "esp32/gps";
+      if (client.println("POST /topics/" + topic + " HTTP/1.1\r\nHost: " + awsEndpoint + "\r\nContent-Type: application/json\r\nContent-Length: " + String(payload.length()) + "\r\n\r\n" + payload)) {
+        Serial.println("Payload sent.");
+      } else {
+        Serial.println("Failed to send payload.");
+      }
+      client.stop();
+    }
+  }
+
+  delay(5000); // Send every 5 sec
+}
+
+
+(Circuit):
+GPS TX → ESP32 GPIO33
+
+GPS RX → ESP32 GPIO32
+
+GPS VCC → 3.3V
+
+GPS GND → GND
+
+(Epected O/P):
+Connecting to WiFi....Connected to WiFi!
+Connecting to AWS IoT...connected.
+Data sent to AWS: 
+{"latitude":12.9715987,"longitude":77.5945627}
+.
+.
+.
+.
+.
+.
+(CODE):
+
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <PubSubClient.h>
+#include <TinyGPS++.h>
+#include <HardwareSerial.h>
+
+#define GPS_RX_PIN 33
+#define GPS_TX_PIN 32
+
+const char* ssid = "YOUR_WIFI_SSID";
+const char* password = "YOUR_WIFI_PASSWORD";
+const char* aws_endpoint = "YOUR_AWS_ENDPOINT"; // e.g., "a3************.iot.us-west-2.amazonaws.com"
+const int aws_port = 8883;
+
+// AWS certificates (replace with your real certs)
+const char* root_ca = R"EOF(
+-----BEGIN CERTIFICATE-----
+YOUR_ROOT_CA_CERTIFICATE
+-----END CERTIFICATE-----
+)EOF";
+
+const char* client_cert = R"EOF(
+-----BEGIN CERTIFICATE-----
+YOUR_DEVICE_CERTIFICATE
+-----END CERTIFICATE-----
+)EOF";
+
+const char* private_key = R"EOF(
+-----BEGIN RSA PRIVATE KEY-----
+YOUR_PRIVATE_KEY
+-----END RSA PRIVATE KEY-----
+)EOF";
+
+// MQTT
+const char* mqtt_topic = "gps/data";
+
+WiFiClientSecure espClient;
+PubSubClient client(espClient);
+TinyGPSPlus gps;
+HardwareSerial gpsSerial(1);
+
+void setup() {
+  Serial.begin(115200);
+  gpsSerial.begin(115200, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+  delay(3000);
+
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to Wi-Fi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected to Wi-Fi");
+
+  espClient.setCACert(root_ca);
+  espClient.setCertificate(client_cert);
+  espClient.setPrivateKey(private_key);
+  client.setServer(aws_endpoint, aws_port);
+  connectToAWS();
+}
+
+void connectToAWS() {
+  Serial.print("Connecting to AWS IoT...");
+  while (!client.connected()) {
+    if (client.connect("ESP32_GPS_Client")) {
+      Serial.println("Connected!");
+    } else {
+      Serial.print(".");
+      delay(1000);
+    }
+  }
+}
+
+void loop() {
+  if (!client.connected()) {
+    connectToAWS();
+  }
+  client.loop();
+
+  while (gpsSerial.available() > 0) {
+    if (gps.encode(gpsSerial.read()) && gps.location.isValid()) {
+      float lat = gps.location.lat();
+      float lng = gps.location.lng();
+      float alt = gps.altitude.meters();
+      int sat = gps.satellites.value();
+
+      String payload = "{";
+      payload += "\"latitude\":" + String(lat, 6) + ",";
+      payload += "\"longitude\":" + String(lng, 6) + ",";
+      payload += "\"altitude\":" + String(alt, 2) + ",";
+      payload += "\"satellites\":" + String(sat);
+      payload += "}";
+
+      Serial.println("Sending to AWS IoT:");
+      Serial.println(payload);
+
+      client.publish(mqtt_topic, payload.c_str());
+      delay(10000); // Send every 10 seconds
+    }
+  }
+}
+.
+.
+.
+.
+.
+(Code from email):
+
+#include <TinyGPS++.h>
+#include <SoftwareSerial.h>
+
+
+#define GPS_RX_PIN 33 
+#define GPS_TX_PIN 32 
+
+
+TinyGPSPlus gps;
+SoftwareSerial gpsSerial(GPS_RX_PIN, GPS_TX_PIN);
+
+
+void setup() {
+    Serial.begin(115200);  
+    gpsSerial.begin(115200); 
+
+
+    Serial.println("Getting GPS data...");
+}
+
+
+void loop() {
+    // Read data from GPS module
+    while (gpsSerial.available() > 0) {
+        if (gps.encode(gpsSerial.read())) {
+            if (gps.location.isValid()) {
+                // Get latitude and longitude
+                float latitude = gps.location.lat();
+                float longitude = gps.location.lng();
+
+
+                // Print latitude and longitude
+                Serial.print("Latitude: ");
+                Serial.println(latitude, 7);
+                Serial.print("Longitude: ");
+                Serial.println(longitude, 7);
+            }
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
