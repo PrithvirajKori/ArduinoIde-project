@@ -1,40 +1,29 @@
 #include <TinyGPS++.h>
-#include <SoftwareSerial.h>
 
-
-#define GPS_RX_PIN 33 
-#define GPS_TX_PIN 32 
-
+#define GPS_RX_PIN 33
+#define GPS_TX_PIN 32
 
 TinyGPSPlus gps;
-SoftwareSerial gpsSerial(GPS_RX_PIN, GPS_TX_PIN);
-
+HardwareSerial gpsSerial(1);  // Use Serial1
 
 void setup() {
-    Serial.begin(115200);  
-    gpsSerial.begin(115200); 
-
-
-    Serial.println("Getting GPS data...");
+  Serial.begin(115200);
+  gpsSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);  // Use 9600 or check your module's baud rate
+  Serial.println("Getting GPS data...");
 }
 
-
 void loop() {
-    // Read data from GPS module
-    while (gpsSerial.available() > 0) {
-        if (gps.encode(gpsSerial.read())) {
-            if (gps.location.isValid()) {
-                // Get latitude and longitude
-                float latitude = gps.location.lat();
-                float longitude = gps.location.lng();
+  while (gpsSerial.available() > 0) {
+    if (gps.encode(gpsSerial.read())) {
+      if (gps.location.isValid()) {
+        float latitude = gps.location.lat();
+        float longitude = gps.location.lng();
 
-
-                // Print latitude and longitude
-                Serial.print("Latitude: ");
-                Serial.println(latitude, 7);
-                Serial.print("Longitude: ");
-                Serial.println(longitude, 7);
-            }
-        }
+        Serial.print("Latitude: ");
+        Serial.println(latitude, 7);
+        Serial.print("Longitude: ");
+        Serial.println(longitude, 7);
+      }
     }
+  }
 }

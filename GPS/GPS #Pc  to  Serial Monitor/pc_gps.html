@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Send PC GPS to ESP32</title>
+  <style>
+    body { font-family: Arial; padding: 20px; background: #f0f0f0; }
+    #log { background: #fff; padding: 10px; border: 1px solid #ccc; height: 150px; overflow-y: scroll; white-space: pre-wrap; }
+    button { margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h2>Send PC Location to ESP32</h2>
+  <button onclick="sendLocation()">Send My Location</button>
+  <div id="log"></div>
+
+  <script>
+    const espIP = "http://192.168.58.96"; // 🧠 Replace with your ESP32 IP from Serial Monitor
+
+    function log(msg) {
+      const logDiv = document.getElementById("log");
+      logDiv.textContent += msg + "\n";
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    function sendLocation() {
+      if (!navigator.geolocation) {
+        log("❌ Geolocation not supported.");
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(pos => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        log(`📤 Sending: ${lat}, ${lng}`);
+
+        fetch(`${espIP}/gps`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: `lat=${lat}&lng=${lng}`
+        }).then(res => {
+          if (res.ok) {
+            log("✅ Sent successfully!");
+          } else {
+            log("❌ Failed to send.");
+          }
+        }).catch(err => {
+          log("❌ Error: " + err);
+        });
+
+      }, err => {
+        log("❌ Location error: " + err.message);
+      });
+    }
+  </script>
+</body>
+</html>
