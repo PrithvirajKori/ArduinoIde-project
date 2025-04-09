@@ -14,7 +14,7 @@
   <div id="log"></div>
 
   <script>
-    const espIP = "http://192.168.58.96"; // 🧠 Replace with your ESP32 IP from Serial Monitor
+    const espIP = "http://192.168.58.96"; // 🔁 Replace with your ESP32's actual IP
 
     function log(msg) {
       const logDiv = document.getElementById("log");
@@ -43,8 +43,6 @@
           } else {
             log("❌ Failed to send.");
           }
-        }).catch(err => {
-          log("❌ Error: " + err);
         });
 
       }, err => {
