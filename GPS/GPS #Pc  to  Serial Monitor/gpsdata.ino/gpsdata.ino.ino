@@ -1,40 +1,25 @@
-#include <WiFi.h>
-#include <ESPAsyncWebServer.h>
+#include <TinyGPS++.h>
+#include <HardwareSerial.h>
 
-const char* ssid = "Prithviraj";       // Mobile hotspot name
-const char* password = "PrithviraJK123";   // Mobile hotspot password
-
-AsyncWebServer server(80);
+TinyGPSPlus gps;
+HardwareSerial GPS_Serial(2); // UART2
 
 void setup() {
   Serial.begin(115200);
-  WiFi.begin(ssid, password);
-
-  Serial.print("Connecting to WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("\n✅ Connected to WiFi");
-  Serial.print("ESP32 IP: ");
-  Serial.println(WiFi.localIP());
-
-  server.on("/gps", HTTP_POST, [](AsyncWebServerRequest *request){
-    if (request->hasParam("lat", true) && request->hasParam("lng", true)) {
-      String lat = request->getParam("lat", true)->value();
-      String lng = request->getParam("lng", true)->value();
-      Serial.println("📍 Location Received:");
-      Serial.println("Latitude: " + lat);
-      Serial.println("Longitude: " + lng);
-      request->send(200, "text/plain", "OK");
-    } else {
-      request->send(400, "text/plain", "Missing GPS data");
-    }
-  });
-
-  server.begin();
+  GPS_Serial.begin(9600, SERIAL_8N1, 32, 33); // RX=32, TX=33
+  Serial.println("Waiting for GPS fix...");
 }
 
 void loop() {
-  // nothing needed here
+  while (GPS_Serial.available()) {
+    gps.encode(GPS_Serial.read());
+    if (gps.location.isUpdated()) {
+      Serial.print("Latitude: "); Serial.println(gps.location.lat(), 6);
+      Serial.print("Longitude: "); Serial.println(gps.location.lng(), 6);
+      Serial.print("Speed (km/h): "); Serial.println(gps.speed.kmph());
+      Serial.print("Satellites: "); Serial.println(gps.satellites.value());
+      Serial.print("Altitude: "); Serial.println(gps.altitude.meters());
+      Serial.println("-----");
+    }
+  }
 }
