@@ -1,0 +1,175 @@
+#include <HardwareSerial.h>
+
+// Use UART2 (connected to SIMCOM A7672S0 internally)
+#define SIM_RX 17  // Connected to SIM TX (board internal)
+#define SIM_TX 16  // Connected to SIM RX (board internal)
+HardwareSerial simModule(2); // UART2
+
+// Power pin for GSM module - Send low pulse for GSM Power ON
+// refer to  pinout pic below:
+// "https://private-user-images.githubusercontent.com/133974527/247486492-3d5a4121-5ccc-4228-ba7c-4822c5eb15ed.png?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NDQyNzkzMTcsIm5iZiI6MTc0NDI3OTAxNywicGF0aCI6Ii8xMzM5NzQ1MjcvMjQ3NDg2NDkyLTNkNWE0MTIxLTVjY2MtNDIyOC1iYTdjLTQ4MjJjNWViMTVlZC5wbmc_WC1BbXotQWxnb3JpdGhtPUFXUzQtSE1BQy1TSEEyNTYmWC1BbXotQ3JlZGVudGlhbD1BS0lBVkNPRFlMU0E1M1BRSzRaQSUyRjIwMjUwNDEwJTJGdXMtZWFzdC0xJTJGczMlMkZhd3M0X3JlcXVlc3QmWC1BbXotRGF0ZT0yMDI1MDQxMFQwOTU2NTdaJlgtQW16LUV4cGlyZXM9MzAwJlgtQW16LVNpZ25hdHVyZT1iNzJjNzc0MmJiN2FjY2VkNjFmODI5ZGQ3MjE5OTA2ODU1Nzc5OTY4MGE3ZDAyNWY0OGJhMDI2NWY4ZjczYTBmJlgtQW16LVNpZ25lZEhlYWRlcnM9aG9zdCJ9.MVUU55SogJC6orL-R7MJDkV81ZxCmfr_M2k5r4L5xLY"
+#define GSM_POWR 32
+
+void setup() {
+  pinMode(GSM_POWR, OUTPUT);
+  Serial.begin(115200);                           // Serial Monitor
+  digitalWrite(GSM_POWR, 1);
+  delay(500);
+  digitalWrite(GSM_POWR, 0);
+  delay(500);
+  digitalWrite(GSM_POWR, 1);
+  delay(500);
+  simModule.begin(9600, SERIAL_8N1, SIM_RX, SIM_TX);  // SIMCOM UART
+
+  Serial.println("Booting SIMCOM GPS...");
+
+  delay(2000);
+  sendAT("AT+CGMI");                 // Basic AT test
+  sendAT("AT+CGNSSPWR=1");       // Power on GPS
+  sendAT("AT+CGNSTST=0");       // Disable NMEA auto output
+  sendAT("AT+CGNSSEQ=\"RMC\""); // Set NMEA type (optional)
+}
+
+void loop() {
+  Serial.println("\nRequesting GPS data...");
+  simModule.println("AT+CGNSINF");
+  delay(1000);
+
+  while (simModule.available()) {
+    String response = simModule.readStringUntil('\n');
+    response.trim();
+    if (response.startsWith("+CGNSINF:")) {
+      Serial.println("Raw Response: " + response);
+      
+      // Parse GPS info
+      String latitude = parseField(response, 3);
+      String longitude = parseField(response, 4);
+
+      Serial.println("Latitude: " + latitude);
+      Serial.println("Longitude: " + longitude);
+    }
+  }
+
+  delay(5000); // wait 5 sec before next update
+}
+
+void sendAT(String cmd) {
+  simModule.println(cmd);
+  delay(500);
+  if (simModule.available()) {
+    Serial.println("From sendAT simModule.available for: " + cmd);
+    String line = simModule.readStringUntil('\n');
+    line.trim();
+    if (line.length()) {
+      Serial.println("[" + cmd + "] => " + line);
+    }
+  } else {
+    Serial.println("From sendAT simModule.available failed.!!! for " + cmd);
+  }
+  while (simModule.available()) {
+    String line = simModule.readStringUntil('\n');
+    line.trim();
+    if (line.length()) {
+      Serial.println("[" + cmd + "] => " + line);
+    }
+  }
+}
+
+String parseField(String data, int index) {
+  int startIdx = 0;
+  for (int i = 0; i < index; i++) {
+    startIdx = data.indexOf(',', startIdx) + 1;
+    if (startIdx == 0) return "";
+  }
+  int endIdx = data.indexOf(',', startIdx);
+  if (endIdx == -1) return data.substring(startIdx);
+  return data.substring(startIdx, endIdx);
+}
+
+
+#define TINY_GSM_MODEM_SIM7600 // SIM7600 compatible with A7672S
+#define SerialAT Serial1
+#define SerialMon Serial
+
+#include <TinyGsmClient.h>
+#include <Ticker.h>
+
+TinyGsm modem(SerialAT);
+
+#define UART_BAUD   115200
+#define PIN_DTR     25  // 4G module DTR
+#define PIN_TX      17  // 4G module TX
+#define PIN_RX      16  // 4G module RX
+#define PWR_PIN     32  // 4G module power key
+
+#define LED_PIN     2   // On-board status LED
+
+// Power ON sequence for inbuilt A7672S
+void modemPowerOn() {
+  pinMode(PWR_PIN, OUTPUT);
+  digitalWrite(PWR_PIN, LOW);
+  delay(1000);
+  digitalWrite(PWR_PIN, HIGH);
+}
+
+void setup() {
+  SerialMon.begin(115200);
+  delay(100);
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);
+
+  Serial.println("\nBooting Bharat Pi with in-built A7672S modem...");
+  Serial.println("Make sure 9V-2A power is connected.\n");
+
+  modemPowerOn();  // Power on the internal SIM module
+  delay(1000);
+
+  SerialAT.begin(UART_BAUD, SERIAL_8N1, PIN_RX, PIN_TX);
+  delay(3000);
+
+  Serial.println("Initializing modem...");
+  if (!modem.init()) {
+    Serial.println("Modem init failed. SIM might be missing or not detected.");
+  } else {
+    Serial.println("Modem initialized.");
+  }
+
+  digitalWrite(LED_PIN, HIGH);
+  delay(2000);
+
+  String res;
+
+  Serial.println("Sending AT command to check response...");
+  modem.sendAT("AT");
+  modem.waitResponse(1000, res);
+  Serial.println(res);
+
+  Serial.println("\nReading SIM status...");
+  modem.sendAT("+CPIN?");
+  modem.waitResponse(1000, res);
+  Serial.println(res);
+
+  Serial.println("\nRunning +SIMCOMATI to get module info...");
+  modem.sendAT("+SIMCOMATI");
+  modem.waitResponse(1000, res);
+  Serial.println(res);
+
+  Serial.println("\nModem model: " + modem.getModemModel());
+  Serial.println("Modem info: " + modem.getModemInfo());
+
+  Serial.println("\nTo test manually:");
+  Serial.println("Type AT in the Serial Monitor and check for OK.");
+  Serial.println("If SIM is inserted properly, +CPIN should show READY.\n");
+
+  Serial.println(">>>>>>>> READY FOR AT COMMAND TEST <<<<<<<<");
+}
+
+void loop() {
+  while (SerialAT.available()) {
+    SerialMon.write(SerialAT.read());
+  }
+  while (SerialMon.available()) {
+    SerialAT.write(SerialMon.read());
+  }
+}
+

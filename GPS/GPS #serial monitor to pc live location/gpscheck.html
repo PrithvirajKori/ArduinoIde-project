@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>ESP32 GPS Tracker</title>
+  <style>
+    #map {
+      height: 90vh;
+      width: 100%;
+    }
+    body {
+      font-family: Arial;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+    }
+  </style>
+</head>
+<body>
+  <h2>📍 Live GPS Tracker from ESP32</h2>
+  <div id="map"></div>
+
+  <script>
+    let map, marker;
+    const espIP = "http://192.168.116.96"; // ⚠️ Replace with your ESP32 IP
+    const fetchInterval = 2000; // 2 seconds
+
+    function initMap() {
+      const defaultPos = { lat: 0, lng: 0 };
+      map = new google.maps.Map(document.getElementById("map"), {
+        zoom: 15,
+        center: defaultPos
+      });
+      marker = new google.maps.Marker({
+        position: defaultPos,
+        map: map,
+        title: "ESP32 GPS"
+      });
+
+      updateGPS();
+      setInterval(updateGPS, fetchInterval);
+    }
+
+    function updateGPS() {
+      fetch(espIP + "/gpsdata") // 🧠 Optional if you expose this JSON endpoint
+        .then(response => response.json())
+        .then(data => {
+          const lat = parseFloat(data.lat);
+          const lng = parseFloat(data.lng);
+          const newPos = { lat, lng };
+          marker.setPosition(newPos);
+          map.setCenter(newPos);
+        })
+        .catch(err => {
+          console.error("Failed to get GPS:", err);
+        });
+    }
+  </script>
+
+  <!-- 🔑 Use your own Google Maps JS API key here -->
+  <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap"
+  async defer></script>
+</body>
+</html>
+
+//📍 Live GPS Tracker from ESP32
+//A full-screen Google Map, centered on the latest GPS coordinates sent from your ESP32.
+
+//🟥 A red location marker will appear on the map.
+
+//🧭 The marker will move automatically as new GPS data is received.
+
+//🛰️ Map auto-centers on the latest GPS location every few seconds (based on your ESP32 POSTs or /gpsdata GET request).
