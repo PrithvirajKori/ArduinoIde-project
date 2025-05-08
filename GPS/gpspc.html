@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>PC Location Sender</title>
+</head>
+<body>
+  <h1>Send Location to Bharat Pi</h1>
+  <button onclick="sendLocation()">Send Location</button>
+
+  <script>
+    async function sendLocation() {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(async (position) => {
+          const latitude = position.coords.latitude;
+          const longitude = position.coords.longitude;
+          const locData = `${latitude},${longitude}\n`;
+
+          const port = await navigator.serial.requestPort();
+          await port.open({ baudRate: 115200 });
+          const writer = port.writable.getWriter();
+          await writer.write(new TextEncoder().encode(locData));
+          writer.releaseLock();
+        });
+      } else {
+        alert("Geolocation is not supported by this browser.");
+      }
+    }
+  </script>
+</body>
+</html>

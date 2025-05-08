@@ -1,0 +1,158 @@
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <PubSubClient.h>
+
+// Wi-Fi credentials
+const char* ssid = "Prithviraj";
+const char* password = "PrithviraJK123";
+
+// AWS IoT endpoint and topic
+const char* aws_endpoint = "a1avjuxrgsjczi-ats.iot.ap-south-1.amazonaws.com";
+const int port = 8883;
+const char* topic = "gps/data";
+
+// Certificates (stored in Arduino sketch directory or SPIFFS)
+const char* certificate_pem_crt = \
+"-----BEGIN CERTIFICATE-----\n" \
+"MIIDWjCCAkKgAwIBAgIVALhd0roukViaRMzp+NVsKz+xepn3MA0GCSqGSIb3DQEB\n" \
+"CwUAME0xSzBJBgNVBAsMQkFtYXpvbiBXZWIgU2VydmljZXMgTz1BbWF6b24uY29t\n" \
+"IEluYy4gTD1TZWF0dGxlIFNUPVdhc2hpbmd0b24gQz1VUzAeFw0yNTA0MjMwNzM4\n" \
+"MDdaFw00OTEyMzEyMzU5NTlaMB4xHDAaBgNVBAMME0FXUyBJb1QgQ2VydGlmaWNh\n" \
+"dGUwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDBlQqBq9NqZTy3ZJ9H\n" \
+"cfKUvwVFHhgSc3n0IjdW5wX55nIHkzsd5CQcx62Rh7mn9V5W+SOPIpGSLKJTDkrt\n" \
+"yX8jcnhCLAC2B6BTC0p6VUaoMoYkob9dwYZeZJTKcnM55tLdK6YOCqWWILJPSJE/\n" \
+"KNxPv0j8j1SXOsV3bNfv6HBu5ZzTTYsyBAE+j1WFRc5NgPeOd5hMzZKl5YBv2fmk\n" \
+"nV4SznxFQYVdBWDDGA96US821oDUE7rKno46Thh1S8AtplBcDwea4fMkF+gwuLh8\n" \
+"dxqIRzeJKGdYU5VjdbqwH/F/8TdDj3eVXDqysfJzFjEMJaQDPupz7Mu/OQ3YhNSI\n" \
+"m6dhAgMBAAGjYDBeMB8GA1UdIwQYMBaAFGWZw9B9ovRbV5vDtHpadOp+dWTZMB0G\n" \
+"A1UdDgQWBBSO37NLl3JNbgvgFM2Lqa2rnonajTAMBgNVHRMBAf8EAjAAMA4GA1Ud\n" \
+"DwEB/wQEAwIHgDANBgkqhkiG9w0BAQsFAAOCAQEAUv+eP60/zfLvDS4BbejvMvFv\n" \
+"xWJTGkPxQOmEX5W8fBx5NdQi9icOZcWjZOTFpDfuuTmgpuRz3pbB7gyrr40+h4/j\n" \
+"RggaqYr8ijnIooJfYaXTrX4dzqCMCPXdy4YgnI9Zll+W2L/LJ3XQpcPBZDhQr7bY\n" \
+"JMWZhBZqk24LrnTeKFOz7RDhMlfC+JEMvUapuwoJGO/f92uWsLXyVKWuyKfuRe3w\n" \
+"J9UWHEHS6ZguQl/F+dUxjiQQtQ1hnquD4AFqetXe5GSt7Hh5nY9YwO0vKs+XZMmI\n" \
+"iQmmfB/eW8DVTubrftA6hv7cmclZg5EL6qcrNVvpgqIhQoP43Pd/fR0jUTZZ3A==\n" \
+"-----END CERTIFICATE-----\n";
+
+
+const char* private_pem_key = \
+"-----BEGIN RSA PRIVATE KEY-----\n" \
+"MIIEowIBAAKCAQEAwZUKgavTamU8t2SfR3HylL8FRR4YEnN59CI3VucF+eZyB5M7\n" \
+"HeQkHMetkYe5p/VeVvkjjyKRkiyiUw5K7cl/I3J4QiwAtgegUwtKelVGqDKGJKG/\n" \
+"XcGGXmSUynJzOebS3SumDgqlliCyT0iRPyjcT79I/I9UlzrFd2zX7+hwbuWc002L\n" \
+"MgQBPo9VhUXOTYD3jneYTM2SpeWAb9n5pJ1eEs58RUGFXQVgwxgPelEvNtaA1BO6\n" \
+"yp6OOk4YdUvALaZQXA8HmuHzJBfoMLi4fHcaiEc3iShnWFOVY3W6sB/xf/E3Q493\n" \
+"lVw6srHycxYxDCWkAz7qc+zLvzkN2ITUiJunYQIDAQABAoIBAQClRSmDK7+Dxorf\n" \
+"x/h0dsQ0WiGVsOu8VPp5g/zbJMHlaOlRrlF6Y5yxNYjqBoZq7wFsH6hMO6cstQ6g\n" \
+"+kLeYHk7Oi+Rzx+MSVaHj8w2RTfdwcTk4XMQCHk/fX/Kl4vokzjTusA6nLxiP+f7\n" \
+"6GiZE7mEHDuj5HrD4llUbIivOjNDeSgWHhLfX8GZC3mGLALPI0DRtHzP6iBiwwZo\n" \
+"Dwwr6KqZsS5sGrz5zScei2lI4qMRrZE161+yOghiTG9yGpQa+y79+KJXh43FUgZs\n" \
+"8ITNCq5uso3EtSBXKgvYutmIIVstjphC/TRfG72AmROeS7UTJNIA2+jXVU6Mn8b0\n" \
+"3/9liDZBAoGBAO+VTQSzVvL70fHmUskepcZqeC2biJtritj1R3LyQDqv4TtVKJuj\n" \
+"utofUPc6porn2kaM0QwIhE/Mqj3h4A/EFUwBJ7Qv9Y7Tk30rk48DAlXLBBbWL9gE\n" \
+"9uK6gXOv8+/0o4jZl1EgSw5LQ3GvUiOF1FT/LWTNEr69ipbAVwYnapGfAoGBAM7Y\n" \
+"zcC0eFfdgoUkOzurkiIJnpKRwl2VaAJGt8S5lsth69Nci83iiGFl1Y25WlqSHKT/\n" \
+"Ba07XBSSS0RdWVv7GjtdI1pfF48UtY74AnRf+6JKLbHVJQu4C6VAKpXnFfS89yAr\n" \
+"D4rWy8pAh4UfkZlHiP6cMwGANSo07t6oumoiySb/AoGAQjKCgVX8JE8oByqYnTF2\n" \
+"pIguhIuBB1CDoMbE4yHEVXLbTMWO3tIygqo8eNMfySmeyfeGm0iPJm1qbIbInhKT\n" \
+"v9hh3AuUUc5r5h3wO4edUY8ypgywU4Oro6HcutZXFGoH9XwJr0S4+E4baIIEtAP6\n" \
+"UzHenQd8sm80p8qlQPILJAkCgYB3kNUmjmt+Btoakj33GQ8Iw9y4xq6+n82We0Bg\n" \
+"5BKpj/ncnINnyImjG1VdbgYvkoQiUBP89fIdJg+B/h/YTob0R7tW0t7wYz0r3mq0\n" \
+"0ILJZe2R/S5D3uhEZpn3OrPzW4PSQXHjhJQaXkC4D+5+1t32p13IgU66Dg0CAjB3\n" \
+"h5IVCwKBgCE9GPU05Jk0fiIdlVfh6bjDL6pOBxOcziJfnp+7q42122NOXBHjt2xV\n" \
+"7gMBM0VKw7tic+09iJ/SkO/EeEiTvAqYgJQq80axy3xKYPNQEtOeWEhdxOzmHY08\n" \
+"bbSG0FpLPP7qF4GgsUaTNdz909YolT8wA6/WAtXlNMjVo+p/SZoq\n" \
+"-----END RSA PRIVATE KEY-----\n";
+
+const char* aws_root_ca = \
+"-----BEGIN CERTIFICATE-----\n" \
+"MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkqhkiG9w0BAQsF\n" \
+"ADA5MQswCQYDVQQGEwJVUzEPMA0GA1UEChMGQW1hem9uMRkwFwYDVQQDExBBbWF6\n" \
+"b24gUm9vdCBDQSAxMB4XDTE1MDUyNjAwMDAwMFoXDTM4MDExNzAwMDAwMFowOTEL\n" \
+"MAkGA1UEBhMCVVMxDzANBgNVBAoTBkFtYXpvbjEZMBcGA1UEAxMQQW1hem9uIFJv\n" \
+"b3QgQ0EgMTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALJ4gHHKeNXj\n" \
+"ca9HgFB0fW7Y14h29Jlo91ghYPl0hAEvrAIthtOgQ3pOsqTQNroBvo3bSMgHFzZM\n" \
+"9O6II8c+6zf1tRn4SWiw3te5djgdYZ6k/oI2peVKVuRF4fn9tBb6dNqcmzU5L/qw\n" \
+"IFAGbHrQgLKm+a/sRxmPUDgH3KKHOVj4utWp+UhnMJbulHheb4mjUcAwhmahRWa6\n" \
+"VOujw5H5SNz/0egwLX0tdHA114gk957EWW67c4cX8jJGKLhD+rcdqsq08p8kDi1L\n" \
+"93FcXmn/6pUCyziKrlA4b9v7LWIbxcceVOF34GfID5yHI9Y/QCB/IIDEgEw+OyQm\n" \
+"jgSubJrIqg0CAwEAAaNCMEAwDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMC\n" \
+"AYYwHQYDVR0OBBYEFIQYzIU07LwMlJQuCFmcx7IQTgoIMA0GCSqGSIb3DQEBCwUA\n" \
+"A4IBAQCY8jdaQZChGsV2USggNiMOruYou6r4lK5IpDB/G/wkjUu0yKGX9rbxenDI\n" \
+"U5PMCCjjmCXPI6T53iHTfIUJrU6adTrCC2qJeHZERxhlbI1Bjjt/msv0tadQ1wUs\n" \
+"N+gDS63pYaACbvXy8MWy7Vu33PqUXHeeE6V/Uq2V8viTO96LXFvKWlJbYK8U90vv\n" \
+"o/ufQJVtMVT8QtPHRh8jrdkPSHCa2XV4cdFyQzR1bldZwgJcJmApzyMZFo6IQ6XU\n" \
+"5MsI+yMRQ+hDKXJioaldXgjUkK642M4UwtBV8ob2xJNDd2ZhwLnoQdeXeGADbkpy\n" \
+"rqXRfboQnoZsG4q5WTP468SQvvG5\n" \
+"-----END CERTIFICATE-----\n";
+
+
+WiFiClientSecure secureClient;
+PubSubClient client(secureClient);
+
+// Replace with your own fake lat/lon
+float fakeLatitude = 13.004898;
+float fakeLongitude = 77.6605382;
+WiFi.begin(ssid, password);
+Serial.print("Connecting to WiFi");
+
+int retry = 0;
+while (WiFi.status() != WL_CONNECTED && retry < 20) {
+    delay(500);
+    Serial.print(".");
+    retry++;
+}
+
+if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nConnected to WiFi!");
+    Serial.println(WiFi.localIP());
+} else {
+    Serial.println("\nFailed to connect to WiFi.");
+}
+
+void connectAWS() {
+  secureClient.setCACert(aws_root_ca);
+  secureClient.setCertificate(certificate_pem_crt);
+  secureClient.setPrivateKey(private_pem_key);
+
+  client.setServer(aws_endpoint, port);
+
+  Serial.print("Connecting to AWS IoT");
+  while (!client.connect("BharatPiClient")) {
+    Serial.print(".");
+    delay(1000);
+  }
+  Serial.println(" Connected to AWS IoT!");
+}
+
+void publishFakeGPS() {
+  String payload = "{";
+  payload += "\"lat\": " + String(fakeLatitude, 6) + ",";
+  payload += "\"lon\": " + String(fakeLongitude, 6);
+  payload += "}";
+
+  Serial.print("Publishing: ");
+  Serial.println(payload);
+
+  if (client.publish(topic, payload.c_str())) {
+    Serial.println("Published successfully!");
+  } else {
+    Serial.println("Publish failed.");
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  connectWiFi();
+  connectAWS();
+}
+
+void loop() {
+  if (!client.connected()) {
+    connectAWS();
+  }
+
+  client.loop();
+  publishFakeGPS();
+  delay(10000);  // send every 10 seconds
+}
